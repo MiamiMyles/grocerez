@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>GrocerEZ</title>
+<meta name="theme-color" content="#C8111E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GrocerEZ">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="preload" href="fonts/figtree-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/comic-neue-700.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="header">
+    <div class="title-block">
+      <h1 class="title">GrocerEZ</h1>
+      <p class="subtitle" id="left-label"></p>
+    </div>
+    <div class="header-actions">
+      <button type="button" class="pill-btn" id="clear-checked" hidden>Clear checked</button>
+      <button type="button" class="pill-btn sort-btn" id="sort-by-tag">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16"/><path d="M4 12h11"/><path d="M4 18h6"/></svg>
+        Sort by tag
+      </button>
+    </div>
+  </header>
+
+  <form class="add-bar" id="add-form" autocomplete="off">
+    <label for="new-item" class="sr-only">New item</label>
+    <input id="new-item" type="text" placeholder="Add an item" autocapitalize="sentences" autocorrect="on" enterkeyhint="enter">
+    <button type="submit" class="add-btn" aria-label="Add item">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+    </button>
+  </form>
+
+  <main class="list" id="list" data-list></main>
+
+</div>
+
+<div class="sheet-wrap" id="sheet" hidden>
+  <button type="button" class="scrim" aria-label="Close tags" data-close></button>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-name">
+    <div class="grabber"></div>
+    <div class="sheet-head">
+      <div class="sheet-titles">
+        <span class="eyebrow">Tags</span>
+        <h2 id="sheet-name"></h2>
+      </div>
+      <button type="button" class="done-btn" data-close>Done</button>
+    </div>
+
+    <p class="first-hint" id="first-hint">You don't have any tags yet. Name your first one — like a store, an aisle, or a recipe.</p>
+
+    <div id="choose-section">
+      <div class="choose">
+        <span class="choose-label">Choose a tag</span>
+        <div class="tag-pills" id="tag-pills"></div>
+      </div>
+      <div class="divider"><span></span>or create a new one<span></span></div>
+    </div>
+
+    <form class="tag-form" id="tag-form" autocomplete="off">
+      <label for="tag-name" class="sr-only">New tag name</label>
+      <input id="tag-name" type="text" autocapitalize="words" enterkeyhint="done">
+      <button type="submit" class="add-tag-btn">Add tag</button>
+    </form>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
