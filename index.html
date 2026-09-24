@@ -31,6 +31,7 @@
         Sort by tag
       </button>
     </div>
+    <button type="button" class="pill-btn recipe-btn" id="recipe-open">Add Ingredients from Recipe✨</button>
   </header>
 
   <form class="add-bar" id="add-form" autocomplete="off">
@@ -72,6 +73,39 @@
       <input id="tag-name" type="text" autocapitalize="words" enterkeyhint="done">
       <button type="submit" class="add-tag-btn">Add tag</button>
     </form>
+  </div>
+</div>
+
+<div class="sheet-wrap" id="recipe-sheet" hidden>
+  <button type="button" class="scrim" aria-label="Close recipe import" data-close></button>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="recipe-title">
+    <div class="grabber"></div>
+    <div class="sheet-head">
+      <div class="sheet-titles">
+        <span class="eyebrow">Add from recipe ✨</span>
+        <h2 id="recipe-title">Paste a recipe</h2>
+      </div>
+      <button type="button" class="done-btn" data-close>Cancel</button>
+    </div>
+
+    <form class="recipe-form" id="recipe-form" autocomplete="off">
+      <label for="recipe-input" class="recipe-hint">Paste the ingredient list, or a link to a recipe page.</label>
+      <textarea id="recipe-input" rows="6" placeholder="2 cups flour&#10;3 eggs&#10;1 onion, diced&#10;&#10;or https://…"></textarea>
+      <p class="recipe-error" id="recipe-error" role="alert" hidden></p>
+      <button type="submit" class="primary-btn" id="recipe-find">Find ingredients</button>
+    </form>
+
+    <div class="recipe-review" id="recipe-review" hidden>
+      <div class="recipe-tag">
+        <label for="recipe-tag" class="choose-label">Tag these items (optional)</label>
+        <input id="recipe-tag" type="text" autocapitalize="words" enterkeyhint="done" placeholder="e.g. Taco night">
+      </div>
+      <div class="found" id="recipe-items"></div>
+      <div class="recipe-actions">
+        <button type="button" class="done-btn" id="recipe-back">Back</button>
+        <button type="button" class="primary-btn" id="recipe-add"></button>
+      </div>
+    </div>
   </div>
 </div>
 
