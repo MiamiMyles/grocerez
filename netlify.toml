@@ -1,0 +1,4 @@
+# Static app at the repo root, plus one serverless function for the AI recipe import.
+[build]
+  publish = "."
+  functions = "netlify/functions"

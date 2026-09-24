@@ -63,6 +63,17 @@
   }
 
   /* ---------- actions ---------- */
+  /* add several items at once (recipe import), optionally tagged */
+  function addItems(names, tagId) {
+    var added = names.map(function (n) { return n.trim(); }).filter(Boolean).map(function (n) {
+      return { id: newId('i'), name: n, done: false, tags: tagId ? [tagId] : [] };
+    });
+    if (!added.length) return false;
+    state.items = settle(state.items.concat(added));
+    commit();
+    return true;
+  }
+
   function addItem(name) {
     name = name.trim();
     if (!name) return false;
@@ -116,18 +127,20 @@
     commit();
   }
 
+  /* reuse a tag with the same name (any case), or create it */
+  function findOrCreateTag(name) {
+    var existing = state.tags.find(function (t) { return t.name.toLowerCase() === name.toLowerCase(); });
+    if (existing) return existing.id;
+    var tagId = newId('t');
+    state.tags = state.tags.concat([{ id: tagId, name: name, color: state.tags.length % PALETTE.length }]);
+    return tagId;
+  }
+
   function addTagToSheetItem(name) {
     name = name.trim();
     var item = findItem(sheetFor);
     if (!name || !item) return false;
-    var existing = state.tags.find(function (t) { return t.name.toLowerCase() === name.toLowerCase(); });
-    var tagId;
-    if (existing) {
-      tagId = existing.id;
-    } else {
-      tagId = newId('t');
-      state.tags = state.tags.concat([{ id: tagId, name: name, color: state.tags.length % PALETTE.length }]);
-    }
+    var tagId = findOrCreateTag(name);
     if (item.tags.indexOf(tagId) === -1) item.tags = item.tags.concat([tagId]);
     commit();
     return true;
@@ -155,6 +168,16 @@
   var chooseSection = $('choose-section');
   var tagPills = $('tag-pills');
   var tagInput = $('tag-name');
+  var recipeSheet = $('recipe-sheet');
+  var recipeForm = $('recipe-form');
+  var recipeInput = $('recipe-input');
+  var recipeError = $('recipe-error');
+  var recipeFind = $('recipe-find');
+  var recipeReview = $('recipe-review');
+  var recipeTitle = $('recipe-title');
+  var recipeTag = $('recipe-tag');
+  var recipeItems = $('recipe-items');
+  var recipeAdd = $('recipe-add');
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
@@ -245,6 +268,143 @@
     document.documentElement.style.removeProperty('--kb');
   }
 
+  /* ---------- recipe import (AI) ---------- */
+  // found: [{ name, on }] from the last successful lookup; null while on the paste step
+  var recipe = { open: false, busy: false, found: null, request: 0 };
+
+  function openRecipe() {
+    if (sheetFor) closeSheet();
+    recipe.open = true;
+    showRecipeInput();
+    recipeSheet.hidden = false;
+    recipeInput.focus();
+  }
+
+  function closeRecipe() {
+    recipe.open = false;
+    recipe.busy = false;
+    recipe.request++; // ignore any lookup still in flight
+    recipe.found = null;
+    recipeInput.value = '';
+    document.activeElement && document.activeElement.blur();
+    recipeSheet.hidden = true;
+    recipeSheet.classList.remove('kb-open');
+    document.documentElement.style.removeProperty('--kb');
+  }
+
+  function showRecipeInput() {
+    recipe.found = null;
+    recipeTitle.textContent = 'Paste a recipe';
+    recipeForm.hidden = false;
+    recipeReview.hidden = true;
+    setRecipeBusy(false);
+    showRecipeError('');
+  }
+
+  function showRecipeError(msg) {
+    recipeError.textContent = msg;
+    recipeError.hidden = !msg;
+  }
+
+  function setRecipeBusy(busy) {
+    recipe.busy = busy;
+    recipeFind.disabled = busy;
+    recipeFind.setAttribute('aria-busy', busy ? 'true' : 'false');
+    recipeFind.textContent = busy ? 'Reading recipe…' : 'Find ingredients';
+  }
+
+  function findIngredients() {
+    var input = recipeInput.value.trim();
+    if (!input || recipe.busy) {
+      if (!input) showRecipeError('Paste some ingredients or a recipe link first.');
+      return;
+    }
+    if (!navigator.onLine) {
+      showRecipeError('You\u2019re offline. Adding from a recipe needs an internet connection.');
+      return;
+    }
+    showRecipeError('');
+    setRecipeBusy(true);
+    var req = ++recipe.request;
+    fetch('api/recipe-ingredients', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ input: input })
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (!res.ok || !data || !Array.isArray(data.items)) {
+          throw new Error((data && data.error) || 'Something went wrong. Please try again.');
+        }
+        return data;
+      });
+    }).then(function (data) {
+      if (req !== recipe.request) return;
+      setRecipeBusy(false);
+      showRecipeReview(data);
+    }).catch(function (err) {
+      if (req !== recipe.request) return;
+      setRecipeBusy(false);
+      showRecipeError(err instanceof TypeError
+        ? 'Couldn\u2019t reach the AI helper. Check your connection and try again.'
+        : err.message);
+    });
+  }
+
+  function showRecipeReview(data) {
+    recipe.found = data.items.map(function (n) { return { name: String(n), on: true }; });
+    recipeTitle.textContent = data.title || 'Ingredients found';
+    recipeTag.value = data.title || '';
+    recipeForm.hidden = true;
+    recipeReview.hidden = false;
+    renderFound();
+    recipeInput.blur();
+  }
+
+  function renderFound() {
+    recipeItems.innerHTML = recipe.found.map(function (f, i) {
+      return '<button type="button" class="found-row" data-found="' + i + '" aria-pressed="' + f.on + '">' +
+        '<span class="box">' + ICON_CHECK + '</span><span class="found-name">' + esc(f.name) + '</span></button>';
+    }).join('');
+    var n = recipe.found.filter(function (f) { return f.on; }).length;
+    recipeAdd.textContent = n ? 'Add ' + n + (n === 1 ? ' item' : ' items') : 'Nothing selected';
+    recipeAdd.disabled = n === 0;
+  }
+
+  function addFound() {
+    var names = recipe.found.filter(function (f) { return f.on; }).map(function (f) { return f.name; });
+    var tagName = recipeTag.value.trim();
+    var tagId = tagName ? findOrCreateTag(tagName) : null;
+    closeRecipe();
+    if (addItems(names, tagId)) {
+      var rows = listEl.querySelectorAll('[data-row]:not(.done)');
+      var last = rows[rows.length - 1];
+      if (last) last.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+
+  $('recipe-open').addEventListener('click', openRecipe);
+
+  recipeForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    findIngredients();
+  });
+
+  recipeSheet.addEventListener('click', function (e) {
+    if (e.target.closest('[data-close]')) { closeRecipe(); return; }
+    var row = e.target.closest('[data-found]');
+    if (row) {
+      var f = recipe.found[+row.getAttribute('data-found')];
+      f.on = !f.on;
+      renderFound();
+    }
+  });
+
+  $('recipe-back').addEventListener('click', showRecipeInput);
+  recipeAdd.addEventListener('click', addFound);
+  recipeTag.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); recipeTag.blur(); }
+  });
+
   /* ---------- events ---------- */
   $('add-form').addEventListener('submit', function (e) {
     e.preventDefault();
@@ -284,16 +444,17 @@
 
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && sheetFor) closeSheet();
+    else if (e.key === 'Escape' && recipe.open) closeRecipe();
   });
 
-  /* keep the tag sheet above the on-screen keyboard (iOS overlays it instead of resizing) */
+  /* keep the open sheet above the on-screen keyboard (iOS overlays it instead of resizing) */
   if (window.visualViewport) {
     var vv = window.visualViewport;
     var syncKeyboard = function () {
-      if (!sheetFor) return;
+      if (!sheetFor && !recipe.open) return;
       var kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
       document.documentElement.style.setProperty('--kb', kb + 'px');
-      sheetEl.classList.toggle('kb-open', kb > 80);
+      (sheetFor ? sheetEl : recipeSheet).classList.toggle('kb-open', kb > 80);
       if (kb > 0) window.scrollTo(0, 0);
     };
     vv.addEventListener('resize', syncKeyboard);
