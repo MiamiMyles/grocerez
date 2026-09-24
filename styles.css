@@ -94,16 +94,8 @@ button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 }
 .subtitle { margin: 0; font-size: 15px; color: var(--header-sub); }
 
-/* fixed height so the header never shifts when "Clear checked" appears */
-.header-actions {
-  height: 96px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: flex-end;
-  gap: 8px;
-  flex-shrink: 0;
-}
+/* "Clear checked" sits beside the title; it's shorter than the title block, so the header never shifts when it appears */
+.header-actions { align-self: center; display: flex; justify-content: flex-end; }
 .pill-btn {
   height: 44px;
   padding: 0 14px;
@@ -401,9 +393,13 @@ button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .add-tag-btn:active { opacity: 0.85; }
 
 /* ---------- recipe import ---------- */
-/* own row under the title: it doesn't fit beside "Sort by tag" on smaller phones */
-.header { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 0; }
-.recipe-btn { grid-column: 1 / -1; justify-self: start; margin-top: -4px; height: 40px; }
+/* recipe import and sort share one compact row under the title */
+.header { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 10px; }
+.toolbar { grid-column: 1 / -1; display: flex; gap: 8px; }
+.toolbar .pill-btn { height: 38px; padding: 0 11px; font-size: 13px; }
+.toolbar .sort-btn { gap: 5px; padding-left: 9px; }
+/* narrow phones (iPhone SE 1st gen): shorten the label so both still fit */
+@media (max-width: 359px) { .long-label { display: none; } }
 
 .recipe-form, .recipe-review { margin: 0; display: flex; flex-direction: column; gap: 12px; }
 .recipe-form[hidden], .recipe-review[hidden], .recipe-error[hidden] { display: none; }
