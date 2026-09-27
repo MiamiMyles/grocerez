@@ -1,6 +1,6 @@
 // Offline cache for the app shell. Bump VERSION whenever app files change
 // so installed copies pick up the update on next launch.
-var VERSION = 'grocerez-v3';
+var VERSION = 'grocerez-v4';
 var FILES = [
   './',
   'index.html',

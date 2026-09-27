@@ -14,7 +14,7 @@
 
   /* ---------- state ---------- */
   // items: [{ id, name, done, tags: [tagId] }] — array order is list order
-  // tags:  [{ id, name, color }] — color is fixed at creation (creation order mod 6)
+  // tags:  [{ id, name, color }] — color is fixed at creation (least-used palette slot); unused tags are pruned
   var state = load();
   var sheetFor = null; // id of the item whose tag sheet is open
   var drag = null;
@@ -26,11 +26,19 @@
       if (raw) {
         var s = JSON.parse(raw);
         if (s && Array.isArray(s.items) && Array.isArray(s.tags)) {
-          return { items: s.items, tags: s.tags, nextId: s.nextId || 1 };
+          return pruneTags({ items: s.items, tags: s.tags, nextId: s.nextId || 1 });
         }
       }
     } catch (e) { /* fall through to a fresh list */ }
     return { items: [], tags: [], nextId: 1 };
+  }
+
+  /* drop tags no item uses, so the tag sheet only offers tags still on the list */
+  function pruneTags(s) {
+    var used = {};
+    s.items.forEach(function (it) { it.tags.forEach(function (id) { used[id] = true; }); });
+    s.tags = s.tags.filter(function (t) { return used[t.id]; });
+    return s;
   }
 
   function save() {
@@ -69,7 +77,7 @@
       return { id: newId('i'), name: n, done: false, tags: tagId ? [tagId] : [] };
     });
     if (!added.length) return false;
-    state.items = settle(state.items.concat(added));
+    state.items = added.concat(state.items);
     commit();
     return true;
   }
@@ -77,7 +85,7 @@
   function addItem(name) {
     name = name.trim();
     if (!name) return false;
-    state.items = settle(state.items.concat([{ id: newId('i'), name: name, done: false, tags: [] }]));
+    state.items = [{ id: newId('i'), name: name, done: false, tags: [] }].concat(state.items);
     commit();
     return true;
   }
@@ -97,11 +105,13 @@
   function removeItem(id) {
     state.items = state.items.filter(function (it) { return it.id !== id; });
     if (sheetFor === id) closeSheet();
+    pruneTags(state);
     commit();
   }
 
   function clearChecked() {
     state.items = state.items.filter(function (it) { return !it.done; });
+    pruneTags(state);
     commit();
   }
 
@@ -132,7 +142,7 @@
     var existing = state.tags.find(function (t) { return t.name.toLowerCase() === name.toLowerCase(); });
     if (existing) return existing.id;
     var tagId = newId('t');
-    state.tags = state.tags.concat([{ id: tagId, name: name, color: state.tags.length % PALETTE.length }]);
+    state.tags = state.tags.concat([{ id: tagId, name: name, color: leastUsedColor() }]);
     return tagId;
   }
 
@@ -144,6 +154,12 @@
     if (item.tags.indexOf(tagId) === -1) item.tags = item.tags.concat([tagId]);
     commit();
     return true;
+  }
+
+  function leastUsedColor() {
+    var counts = PALETTE.map(function () { return 0; });
+    state.tags.forEach(function (t) { counts[t.color % PALETTE.length]++; });
+    return counts.indexOf(Math.min.apply(null, counts));
   }
 
   function toggleTag(tagId) {
@@ -260,7 +276,7 @@
   }
 
   function closeSheet() {
-    sheetFor = null;
+    if (sheetFor) { sheetFor = null; pruneTags(state); commit(); }
     tagInput.value = '';
     tagInput.blur();
     sheetEl.hidden = true;
@@ -375,11 +391,7 @@
     var tagName = recipeTag.value.trim();
     var tagId = tagName ? findOrCreateTag(tagName) : null;
     closeRecipe();
-    if (addItems(names, tagId)) {
-      var rows = listEl.querySelectorAll('[data-row]:not(.done)');
-      var last = rows[rows.length - 1];
-      if (last) last.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }
+    if (addItems(names, tagId)) listEl.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   $('recipe-open').addEventListener('click', openRecipe);
@@ -410,10 +422,8 @@
     e.preventDefault();
     if (addItem(newItemInput.value)) {
       newItemInput.value = '';
-      // keep the new item in view: it lands at the end of the unchecked group
-      var rows = listEl.querySelectorAll('[data-row]:not(.done)');
-      var last = rows[rows.length - 1];
-      if (last) last.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      // keep the new item in view: it lands at the top of the list
+      listEl.scrollTo({ top: 0, behavior: 'smooth' });
     }
   });
 
