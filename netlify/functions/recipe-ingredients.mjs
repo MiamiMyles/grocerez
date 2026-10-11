@@ -1,5 +1,5 @@
 // Turns pasted recipe text, or a link to a recipe page, into grocery list items
-// using Gemini. Runs on Netlify so the API key (GEMINI_API_KEY) never reaches the browser.
+// using OpenRouter. Runs on Netlify so the API key (OPENROUTER_API_KEY) never reaches the browser.
 //
 // POST /api/recipe-ingredients  { input: "..." }  ->  { title, items: ["Flour (2 cups)", ...] }
 // Errors come back as { error: "message safe to show the user" }.
@@ -8,10 +8,10 @@ export const config = { path: '/api/recipe-ingredients' };
 
 var MAX_INPUT = 20000;       // characters of pasted text we accept
 var MAX_PAGE_BYTES = 2000000; // stop reading a recipe page after this
-var MAX_PAGE_TEXT = 30000;   // characters of page text sent to Gemini
+var MAX_PAGE_TEXT = 30000;   // characters of page text sent to the AI
 var MAX_ITEMS = 60;
 var MAX_ITEM_LEN = 80;
-var DEFAULT_MODEL = 'gemini-flash-lite-latest';
+var DEFAULT_MODEL = 'openrouter/auto'; // OpenRouter's Auto Router picks the model for each request
 
 var PROMPT = [
   'You turn recipes into grocery shopping list items.',
@@ -20,16 +20,18 @@ var PROMPT = [
   'Use a short, plain name a shopper would look for. Drop preparation words like chopped, diced, sifted, softened, divided, or "to taste".',
   'If an ingredient has no amount, write just the name. If the same ingredient appears more than once, list it once and combine the amounts when that is simple.',
   'Also return the recipe title if one is clear, otherwise an empty string.',
+  'Reply with JSON only, shaped like {"title": string, "items": [string]}.',
   'If there are no ingredients, return an empty items list.'
 ].join('\n');
 
 var RESPONSE_SCHEMA = {
-  type: 'OBJECT',
+  type: 'object',
   properties: {
-    title: { type: 'STRING' },
-    items: { type: 'ARRAY', items: { type: 'STRING' } }
+    title: { type: 'string' },
+    items: { type: 'array', items: { type: 'string' } }
   },
-  required: ['title', 'items']
+  required: ['title', 'items'],
+  additionalProperties: false
 };
 
 function json(status, body) {
@@ -146,39 +148,56 @@ function pageText(html) {
   return 'Page title: ' + decodeEntities(title).trim() + '\n\n' + text.slice(0, MAX_PAGE_TEXT);
 }
 
-/* ---------- Gemini ---------- */
+/* ---------- OpenRouter ---------- */
 
-async function askGemini(content) {
-  var key = process.env.GEMINI_API_KEY;
-  if (!key) throw new UserError(500, 'The AI helper isn’t set up yet (missing GEMINI_API_KEY).');
-  var model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
+// Models sometimes wrap JSON in a ```json fence even when asked not to.
+function parseJson(text) {
+  text = String(text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  return JSON.parse(text);
+}
+
+async function askAI(content) {
+  var key = process.env.OPENROUTER_API_KEY;
+  if (!key) throw new UserError(500, 'The AI helper isn’t set up yet (missing OPENROUTER_API_KEY).');
+  var model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
   var res;
   try {
-    res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent', {
+    res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
-      signal: AbortSignal.timeout(20000),
-      headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+      signal: AbortSignal.timeout(25000),
+      headers: {
+        'content-type': 'application/json',
+        'authorization': 'Bearer ' + key,
+        'x-title': 'GrocerEZ'
+      },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: PROMPT }] },
-        contents: [{ role: 'user', parts: [{ text: content }] }],
-        generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA }
+        model: model,
+        temperature: 0,
+        messages: [
+          { role: 'system', content: PROMPT },
+          { role: 'user', content: content }
+        ],
+        response_format: {
+          type: 'json_schema',
+          json_schema: { name: 'recipe_ingredients', strict: true, schema: RESPONSE_SCHEMA }
+        }
       })
     });
   } catch (e) {
     throw new UserError(504, 'The AI took too long to answer. Please try again.');
   }
   if (res.status === 429) throw new UserError(429, 'The AI is busy right now. Wait a minute and try again.');
+  if (res.status === 402) throw new UserError(502, 'The AI helper is out of credits.');
   if (!res.ok) {
-    console.error('Gemini error', res.status, await res.text().catch(function () { return ''; }));
+    console.error('OpenRouter error', res.status, await res.text().catch(function () { return ''; }));
     throw new UserError(502, 'The AI couldn’t read that recipe. Please try again.');
   }
   var data = await res.json();
-  var parts = (((data.candidates || [])[0] || {}).content || {}).parts || [];
-  var text = parts.map(function (p) { return p.text || ''; }).join('');
+  var text = (((data.choices || [])[0] || {}).message || {}).content || '';
   try {
-    return JSON.parse(text);
+    return parseJson(text);
   } catch (e) {
-    console.error('Gemini returned non-JSON', text.slice(0, 500));
+    console.error('OpenRouter returned non-JSON', String(text).slice(0, 500));
     throw new UserError(502, 'The AI couldn’t read that recipe. Please try again.');
   }
 }
@@ -230,7 +249,7 @@ export default async function handler(req) {
     } else {
       content = input;
     }
-    var result = clean(await askGemini(content));
+    var result = clean(await askAI(content));
     if (!result.items.length) return json(422, { error: 'No ingredients found. Try pasting the ingredient list instead.' });
     return json(200, result);
   } catch (e) {
