@@ -578,7 +578,7 @@
 
   if ('serviceWorker' in navigator && window.isSecureContext) {
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('sw.js').catch(function () { /* offline support unavailable */ });
+      navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(function () { /* offline support unavailable */ });
     });
   }
 })();
